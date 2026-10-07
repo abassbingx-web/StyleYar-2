@@ -1,0 +1,103 @@
+name: Build StyleYar APK 1.6.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Show repository files
+        run: |
+          echo "===== Repository ====="
+          pwd
+          find . -maxdepth 3 -type f | sort
+
+      - name: Extract StyleYar 1.6.0
+        run: |
+          rm -rf extracted
+          mkdir extracted
+
+          ZIP_FILE="StyleYar_Android_1.6.0_Fixed.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found"
+            echo "Available ZIP files:"
+            find . -maxdepth 2 -type f -name "*.zip" -print
+            exit 1
+          fi
+
+          unzip -o "$ZIP_FILE" -d extracted
+
+          echo "===== Extracted files ====="
+          find extracted -maxdepth 4 -type f | sort
+
+      - name: Find Android project
+        run: |
+          PROJECT_DIR=$(find extracted -name settings.gradle -type f -print -quit)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_DIR")
+
+          echo "Android project:"
+          echo "$PROJECT_DIR"
+
+          test -f "$PROJECT_DIR/settings.gradle"
+          test -f "$PROJECT_DIR/app/build.gradle"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR"
+
+          echo "===== Building StyleYar 1.6.0 ====="
+
+          gradle :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info
+
+      - name: Verify APK
+        run: |
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+          echo "===== APK ====="
+
+          test -f "$APK"
+          test -s "$APK"
+
+          ls -lh "$APK"
+
+          unzip -t "$APK" >/dev/null
+
+          echo "APK verification successful"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: StyleYar-APK-1.6.0
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
